@@ -82,8 +82,7 @@ fn main() {
 
 	let libmodem_original_path =
 		Path::new(&nrfxlib_path).join("nrf_modem/lib/cortex-m33/hard-float/libmodem.a");
-	let libmodem_changed_path =
-		PathBuf::from(env::var("OUT_DIR").unwrap()).join("libmodem.a");
+	let libmodem_changed_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("libmodem.a");
 
 	// The modem library now has compressed headers, but Rust cannot deal with that.
 	// If the appropriate features is active, we're gonna strip it or decompress it.
@@ -116,18 +115,26 @@ fn main() {
 		}
 	}
 
-	// Make sure we link against the libraries
-	println!(
-		"cargo:rustc-link-search={}",
-		libmodem_changed_path.parent().unwrap()
-			.display()
-	);
-	println!(
-		"cargo:rustc-link-search={}",
-		Path::new(&nrfxlib_path)
-			.join("crypto/nrf_oberon/lib/cortex-m33/hard-float")
-			.display()
-	);
-	println!("cargo:rustc-link-lib=static=modem");
-	println!("cargo:rustc-link-lib=static=oberon_3.0.12");
+	let target = env::var("TARGET").unwrap();
+	let is_cortex_m = target.starts_with("thumbv6m-")
+		|| target.starts_with("thumbv7m-")
+		|| target.starts_with("thumbv7em-")
+		|| target.starts_with("thumbv8m.base")
+		|| target.starts_with("thumbv8m.main");
+
+	if is_cortex_m {
+		// Make sure we link against the libraries if we're on a thumb target
+		println!(
+			"cargo:rustc-link-search={}",
+			libmodem_changed_path.parent().unwrap().display()
+		);
+		println!(
+			"cargo:rustc-link-search={}",
+			Path::new(&nrfxlib_path)
+				.join("crypto/nrf_oberon/lib/cortex-m33/hard-float")
+				.display()
+		);
+		println!("cargo:rustc-link-lib=static=modem");
+		println!("cargo:rustc-link-lib=static=oberon_3.0.12");
+	}
 }
