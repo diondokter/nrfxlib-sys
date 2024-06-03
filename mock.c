@@ -3,6 +3,7 @@
 #include "nrf_modem_os.h"
 #include "nrf_modem_at.h"
 #include "nrf_modem_gnss.h"
+#include "nrf_modem.h"
 #include <string.h>
 
 int nrf_fcntl(int fd, int cmd, int flags)
@@ -137,4 +138,12 @@ int nrf_getaddrinfo(const char *restrict nodename,
                     struct nrf_addrinfo **restrict res)
 {
     return NRF_ENOTSUP;
+}
+
+void nrf_freeaddrinfo(struct nrf_addrinfo *ai)
+{
+}
+
+int nrf_modem_init(const struct nrf_modem_init_params *init_params) {
+    return 0;
 }
