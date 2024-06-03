@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "*.x.in": "linkerscript",
+        "*.x": "linkerscript",
+        "nrf_errno.h": "c",
+        "cstring": "c",
+        "nrf_modem_os.h": "c",
+        "nrf_modem_at.h": "c"
+    }
+}

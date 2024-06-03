@@ -135,6 +135,14 @@ fn main() {
 			.join("crypto/nrf_oberon/lib/cortex-m33/hard-float")
 			.display()
 	);
-	println!("cargo:rustc-link-lib=static=modem");
+	// println!("cargo:rustc-link-lib=static=modem");
 	println!("cargo:rustc-link-lib=static=oberon_3.0.13");
+
+	cc::Build::new()
+		.include("third_party/nordic/nrfxlib/nrf_modem/include")
+		.flag("-Wno-unused-parameter")
+		.file("mock.c")
+		.compile("modem");
+	println!("cargo:rerun-if-changed=mock.c");
+	println!("cargo:rerun-if-changed=build.rs");
 }

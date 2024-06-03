@@ -32,12 +32,11 @@ include = [
 	"third_party/nordic/nrfxlib/crypto/nrf_oberon/license.txt",
 ]
 
-[dependencies]
-
 [build-dependencies]
 regex = "1"
 bindgen = "0.66.1"
 llvm-tools = { version = "0.1.1", optional = true }
+cc = "1.0.98"
 
 [features]
 default = ["llvm-objcopy"]
