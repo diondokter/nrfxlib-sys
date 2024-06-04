@@ -78,6 +78,10 @@ fn main() {
 	let bindings_out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");
 	std::fs::write(bindings_out_path, rust_source).expect("Couldn't write updated bindgen output");
 
+	#[cfg(feature = "log")]
+	let libmodem_original_path =
+		Path::new(&nrfxlib_path).join("nrf_modem/lib/cortex-m33/hard-float/libmodem_log.a");
+	#[cfg(not(feature = "log"))]
 	let libmodem_original_path =
 		Path::new(&nrfxlib_path).join("nrf_modem/lib/cortex-m33/hard-float/libmodem.a");
 	let libmodem_changed_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("libmodem.a");
