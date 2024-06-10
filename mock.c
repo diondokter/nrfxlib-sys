@@ -7,9 +7,72 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 
 static nrf_modem_at_notif_handler_t at_notif_callback = NULL;
+
+void call_at_notif_callback(const void *notif)
+{
+    at_notif_callback((const char *)notif);
+}
+
 extern void nrf_modem_os_log_rust(int level, const char *formatted_string);
+
+typedef void (*WorkItemCallback)(const void *context);
+
+typedef struct
+{
+    atomic_uint taken; // 0: free, 1: being initialized, 2: active
+    unsigned int timeout_us;
+    WorkItemCallback callback;
+    const void *context;
+} WorkItem;
+
+#define WORK_QUEUE_SIZE 16
+static WorkItem WORK_QUEUE[WORK_QUEUE_SIZE] = {0};
+
+void run_work_queue(unsigned int delta_time_us)
+{
+    for (int i = 0; i < WORK_QUEUE_SIZE; i++)
+    {
+        if (atomic_load(&WORK_QUEUE[i].taken) == 2)
+        {
+            if (delta_time_us <= WORK_QUEUE[i].timeout_us)
+            {
+                // Timeout is done
+                WORK_QUEUE[i].timeout_us = 0;
+                (WORK_QUEUE[i].callback)(WORK_QUEUE[i].context);
+                WORK_QUEUE[i].callback = NULL;
+                WORK_QUEUE[i].context = NULL;
+                // Release the slot
+                atomic_store(&WORK_QUEUE[i].taken, 0);
+            }
+            else
+            {
+                WORK_QUEUE[i].timeout_us -= delta_time_us;
+            }
+        }
+    }
+}
+
+void add_work(unsigned int timeout_us, WorkItemCallback callback, const void *context)
+{
+    for (int i = 0; i < WORK_QUEUE_SIZE; i++)
+    {
+        const unsigned int expected = 0;
+        // Try take the slot if available
+        if (atomic_compare_exchange_strong(&WORK_QUEUE[i].taken, &expected, 1))
+        {
+            WORK_QUEUE[i].callback = callback;
+            WORK_QUEUE[i].context = context;
+            WORK_QUEUE[i].timeout_us = timeout_us;
+            atomic_store(&WORK_QUEUE[i].taken, 2);
+            return;
+        }
+    }
+
+    asm volatile("udf");
+}
 
 int nrf_fcntl(int fd, int cmd, int flags)
 {
@@ -56,7 +119,6 @@ int nrf_close(int fildes)
     return 0;
 }
 
-
 const char *process_at(const char *fmt, va_list args)
 {
     char buffer[256] = {0};
@@ -96,7 +158,7 @@ const char *process_at(const char *fmt, va_list args)
 
     if (!strcmp(buffer, "AT%NCELLMEAS=4,6\r\n"))
     {
-        at_notif_callback("%NCELLMEAS: 0,\"002B670D\",\"20408\",\"8729\",62,11447,6400,424,52,23,10002,1,1,6400,408,47,13,0,\"002B670D\",\"20408\",\"8729\",62,11447,6400,424,52,23,10002,1,1,6400,408,47,13,0");
+        add_work(1000, call_at_notif_callback, (const void *)"%NCELLMEAS: 0,\"002B670D\",\"20408\",\"8729\",62,11447,6400,424,52,23,10002,1,1,6400,408,47,13,0,\"002B670D\",\"20408\",\"8729\",62,11447,6400,424,52,23,10002,1,1,6400,408,47,13,0");
     }
 
     return "OK\r\n";
