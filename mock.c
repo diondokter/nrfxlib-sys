@@ -9,6 +9,7 @@
 #include <stdarg.h>
 #include <stdatomic.h>
 
+static int current_creg = 1;
 static nrf_modem_at_notif_handler_t at_notif_callback = NULL;
 
 void call_at_notif_callback(const void *notif)
@@ -71,7 +72,7 @@ void add_work(unsigned int timeout_us, WorkItemCallback callback, const void *co
         }
     }
 
-    asm volatile("udf");
+    nrf_modem_os_log_rust(NRF_MODEM_LOG_LEVEL_ERR, "Out of work spots!");
 }
 
 int nrf_fcntl(int fd, int cmd, int flags)
@@ -79,9 +80,18 @@ int nrf_fcntl(int fd, int cmd, int flags)
     return 0;
 }
 
+static nrf_modem_pollcb_t socket_callback = NULL;
+void call_socket_callback(const void* context) {
+    socket_callback((struct nrf_pollfd *)context);
+}
+
 int nrf_setsockopt(int socket, int level, int option_name,
                    const void *option_value, nrf_socklen_t option_len)
 {
+    if (option_name == NRF_SO_POLLCB) {
+        socket_callback = (*(struct nrf_modem_pollcb *)option_value).callback;
+    }
+
     return 0;
 }
 
@@ -90,8 +100,15 @@ int nrf_socket(int family, int type, int protocol)
     return 0;
 }
 
+int socket_state = 0; // 0: unconnected, 1: connected
+
 int nrf_connect(int socket, const struct nrf_sockaddr *address, nrf_socklen_t address_len)
 {
+    if (socket_state == 0) {
+        static struct nrf_pollfd POLLFD = {.fd = 0, .revents = 4, .events = 0 };
+        add_work(121185, call_socket_callback, &POLLFD);
+        return NRF_EINPROGRESS;
+    }
     return 0;
 }
 
@@ -119,6 +136,20 @@ int nrf_close(int fildes)
     return 0;
 }
 
+void set_cereg_state(const void* value) {
+    current_creg = *(const int*)value;
+
+    if (current_creg == 1) {
+        at_notif_callback("+CEREG: 1");
+    }
+    if (current_creg == 2) {
+        at_notif_callback("+CEREG: 2");
+    }
+    if (current_creg == 5) {
+        at_notif_callback("+CEREG: 5");
+    }
+}
+
 const char *process_at(const char *fmt, va_list args)
 {
     char buffer[256] = {0};
@@ -131,9 +162,16 @@ const char *process_at(const char *fmt, va_list args)
     {
         return "+CFUN: 0\r\nOK\r\n";
     }
+    if (!strcmp(buffer, "AT+CFUN=21"))
+    {
+        static int STATE_2 = 2;
+        static int STATE_5 = 5;
+        add_work(4314332, set_cereg_state, &STATE_2);
+        add_work(6973969, set_cereg_state, &STATE_5);
+    }
     if (!strcmp(buffer, "AT+CGSN"))
     {
-        return "352656100367872\r\nOK\r\n";
+        return "353785728423590\r\nOK\r\n";
     }
     if (!strcmp(buffer, "AT+CGMR"))
     {
@@ -145,7 +183,15 @@ const char *process_at(const char *fmt, va_list args)
     }
     if (!strcmp(buffer, "AT+CEREG?"))
     {
-        return "+CEREG: 2,5\r\nOK\r\n";
+        if (current_creg == 1) {
+            return "+CEREG: 1,4\r\nOK\r\n";
+        }
+        if (current_creg == 2) {
+            return "+CEREG: 1,2\r\nOK\r\n";
+        }
+        if (current_creg == 5) {
+            return "+CEREG: 1,5\r\nOK\r\n";
+        }
     }
     if (!strcmp(buffer, "AT%XTEMP?"))
     {
@@ -158,7 +204,10 @@ const char *process_at(const char *fmt, va_list args)
 
     if (!strcmp(buffer, "AT%NCELLMEAS=4,6\r\n"))
     {
-        add_work(1000, call_at_notif_callback, (const void *)"%NCELLMEAS: 0,\"002B670D\",\"20408\",\"8729\",62,11447,6400,424,52,23,10002,1,1,6400,408,47,13,0,\"002B670D\",\"20408\",\"8729\",62,11447,6400,424,52,23,10002,1,1,6400,408,47,13,0");
+        add_work(
+            3487396, // ~3.5 seconds
+            call_at_notif_callback,
+            (const void *)"%NCELLMEAS: 0,\"01186F0B\",\"20408\",\"878F\",65535,0,6400,14,42,12,6898,0,0,\"0366FC7A\",\"20416\",\"0203\",65535,0,6200,80,37,13,6907,0,0");
     }
 
     return "OK\r\n";
