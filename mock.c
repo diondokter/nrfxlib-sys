@@ -38,7 +38,7 @@ void run_work_queue(unsigned int delta_time_us)
     {
         if (atomic_load(&WORK_QUEUE[i].taken) == 2)
         {
-            if (delta_time_us <= WORK_QUEUE[i].timeout_us)
+            if (delta_time_us >= WORK_QUEUE[i].timeout_us)
             {
                 // Timeout is done
                 WORK_QUEUE[i].timeout_us = 0;
@@ -107,6 +107,7 @@ int nrf_connect(int socket, const struct nrf_sockaddr *address, nrf_socklen_t ad
     if (socket_state == 0) {
         static struct nrf_pollfd POLLFD = {.fd = 0, .revents = 4, .events = 0 };
         add_work(121185, call_socket_callback, &POLLFD);
+        socket_state = 1;
         return NRF_EINPROGRESS;
     }
     return 0;
@@ -140,13 +141,13 @@ void set_cereg_state(const void* value) {
     current_creg = *(const int*)value;
 
     if (current_creg == 1) {
-        at_notif_callback("+CEREG: 1");
+        at_notif_callback("+CEREG: 1\r\n");
     }
     if (current_creg == 2) {
-        at_notif_callback("+CEREG: 2");
+        at_notif_callback("+CEREG: 2\r\n");
     }
     if (current_creg == 5) {
-        at_notif_callback("+CEREG: 5");
+        at_notif_callback("+CEREG: 5\r\n");
     }
 }
 
@@ -208,6 +209,10 @@ const char *process_at(const char *fmt, va_list args)
             3487396, // ~3.5 seconds
             call_at_notif_callback,
             (const void *)"%NCELLMEAS: 0,\"01186F0B\",\"20408\",\"878F\",65535,0,6400,14,42,12,6898,0,0,\"0366FC7A\",\"20416\",\"0203\",65535,0,6200,80,37,13,6907,0,0");
+    }
+    if (!strcmp(buffer, "AT%XFACTORYRESET=0"))
+    {
+        nrf_modem_os_busywait(1250000);
     }
 
     return "OK\r\n";
@@ -318,6 +323,7 @@ void nrf_freeaddrinfo(struct nrf_addrinfo *ai)
 
 int nrf_modem_init(const struct nrf_modem_init_params *init_params)
 {
+    nrf_modem_os_busywait(500000);
     return 0;
 }
 
